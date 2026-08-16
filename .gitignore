@@ -1,0 +1,7 @@
+generated/
+.env
+*.pem
+*.key
+*.crt
+*.log
+sing-box
