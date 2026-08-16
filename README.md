@@ -15,7 +15,11 @@ The setup script creates the UUID, passwords, Reality keys, and certificates on 
 
 You need an Ubuntu 22.04 or newer VPS with a public IPv4 address. You also need root access through SSH.
 
-The VPS needs `curl`, `openssl`, `tar`, and `iptables`. Ubuntu images normally include these tools except `iptables` on some minimal images.
+The setup script installs `curl`, `openssl`, `tar`, and `iptables` when they are missing. To install them before running the script, use this command inside the VPS.
+
+```bash
+sudo apt-get update && sudo apt-get install -y curl openssl tar iptables
+```
 
 For AWS, add these security group rules.
 
@@ -87,14 +91,14 @@ The `generated` directory is ignored by Git. Do not commit it. The files contain
 
 Download the Windows x64 sing-box release. Extract `sing-box.exe` and `wintun.dll` into the same directory.
 
-Copy `generated/Windows-Singbox-TCP.json` into that directory.
+Copy `generated/Windows-TCP.json` into that directory.
 
 ```powershell
 cd C:\sing-box
-.\sing-box.exe run -c Windows-Singbox-TCP.json
+.\sing-box.exe run -c Windows-TCP.json
 ```
 
-Use `Windows-Singbox-UDP.json` when UDP is allowed. Use `Windows-Singbox-Auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
+Use `Windows-TCP.json` for downloads. Use `Windows-UDP.json` for gaming when UDP is allowed. Use `Windows-Auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
 
 The sing-box log shows the selected transport as UDP or TCP.
 
@@ -109,11 +113,11 @@ Receive window autotuning should show `normal`.
 
 ## Android
 
-Install sing-box for Android. Import `generated/Android-Singbox-TCP.json`, grant VPN permission, and start the profile.
+Install sing-box for Android. Import `generated/Android-TCP.json`, grant VPN permission, and start the profile.
 
 Exclude sing-box from battery optimization. Android can stop VPN services that run in the background.
 
-Use `Android-Singbox-UDP.json` when UDP is allowed. Use `Android-Singbox-Auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
+Use `Android-TCP.json` for downloads. Use `Android-UDP.json` for gaming when UDP is allowed. Use `Android-Auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
 
 Open the sing-box log view to see the selected transport as UDP or TCP.
 
@@ -140,7 +144,7 @@ Check the server from Ubuntu.
 ```bash
 sudo systemctl status sing-box
 sudo journalctl -u sing-box -f
-sudo systemctl status college-gaming-vpn-redirect
+sudo systemctl status cleardpi-udp-redirect
 ```
 
 ## Manage The Server

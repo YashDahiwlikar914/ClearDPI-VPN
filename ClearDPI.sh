@@ -25,12 +25,25 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
-SERVER_IP="${SERVER_IP:-$(curl -4fsS --max-time 5 https://api.ipify.org)}"
-SING_BOX_VERSION="${SING_BOX_VERSION:-}"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/sing-box"
 CLIENT_DIR="/root/ClearDPI-VPN/Clients"
+AUTO_TEST_INTERVAL="876000h"
 ARCH="$(uname -m)"
+
+MISSING_PACKAGES=()
+for PACKAGE in curl openssl tar iptables; do
+  command -v "$PACKAGE" >/dev/null || MISSING_PACKAGES+=("$PACKAGE")
+done
+
+if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
+  echo "Installing missing packages ${MISSING_PACKAGES[*]}."
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "${MISSING_PACKAGES[@]}"
+fi
+
+SERVER_IP="${SERVER_IP:-$(curl -4fsS --max-time 5 https://api.ipify.org)}"
+SING_BOX_VERSION="${SING_BOX_VERSION:-}"
 
 case "$ARCH" in
   x86_64) SING_BOX_ARCH="amd64" ;;
@@ -47,10 +60,6 @@ if [ -z "$SING_BOX_VERSION" ]; then
   exit 1
 fi
 
-command -v curl >/dev/null || { echo "Curl is missing."; exit 1; }
-command -v openssl >/dev/null || { echo "OpenSSL is missing."; exit 1; }
-command -v tar >/dev/null || { echo "Tar is missing."; exit 1; }
-
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -63,7 +72,7 @@ install -m 0755 "$(find "$TMP_DIR" -type f -name sing-box -print -quit)" "$INSTA
 install -d -m 0700 "$CONFIG_DIR" "$CLIENT_DIR"
 
 UUID="$(cat /proc/sys/kernel/random/uuid)"
-HY2_PASSWORD="$(openssl rand -hex 24)"
+HYSTERIA2_PASSWORD="$(openssl rand -hex 24)"
 OBFS_PASSWORD="$(openssl rand -hex 24)"
 REALITY_KEYS="$($INSTALL_DIR/sing-box generate reality-keypair)"
 REALITY_PRIVATE_KEY="$(printf '%s\n' "$REALITY_KEYS" | awk '/PrivateKey:/ {print $2}')"
@@ -106,10 +115,10 @@ cat > "$CONFIG_DIR/config.json" <<EOF
     },
     {
       "type": "hysteria2",
-      "tag": "hy2-in",
+      "tag": "hysteria2-in",
       "listen": "::",
       "listen_port": 8443,
-      "users": [{"name": "client", "password": "$HY2_PASSWORD"}],
+      "users": [{"name": "client", "password": "$HYSTERIA2_PASSWORD"}],
       "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"},
       "tls": {
         "enabled": true,
@@ -124,7 +133,7 @@ cat > "$CONFIG_DIR/config.json" <<EOF
 }
 EOF
 
-cat > /etc/sysctl.d/99-college-gaming-vpn.conf <<'EOF'
+cat > /etc/sysctl.d/99-cleardpi-vpn.conf <<'EOF'
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.core.rmem_max = 16777216
@@ -162,7 +171,7 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 EOF
 
-cat > /usr/local/sbin/college-gaming-vpn-redirect <<'EOF'
+cat > /usr/local/sbin/cleardpi-udp-redirect <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -177,9 +186,9 @@ for PORT in 53 123 443 3074 3478 19302; do
   fi
 done
 EOF
-chmod 0755 /usr/local/sbin/college-gaming-vpn-redirect
+chmod 0755 /usr/local/sbin/cleardpi-udp-redirect
 
-cat > /etc/systemd/system/college-gaming-vpn-redirect.service <<'EOF'
+cat > /etc/systemd/system/cleardpi-udp-redirect.service <<'EOF'
 [Unit]
 Description=ClearDPI VPN UDP Port Disguises
 After=network-online.target
@@ -188,8 +197,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/usr/local/sbin/college-gaming-vpn-redirect start
-ExecStop=/usr/local/sbin/college-gaming-vpn-redirect stop
+ExecStart=/usr/local/sbin/cleardpi-udp-redirect start
+ExecStop=/usr/local/sbin/cleardpi-udp-redirect stop
 
 [Install]
 WantedBy=multi-user.target
@@ -198,16 +207,16 @@ EOF
 "$INSTALL_DIR/sing-box" check -c "$CONFIG_DIR/config.json"
 systemctl daemon-reload
 systemctl enable --now sing-box
-systemctl enable --now college-gaming-vpn-redirect
+systemctl enable --now cleardpi-udp-redirect
 
 SHORT_ID="$(awk -F'"' '/"short_id"/ {print $4; exit}' "$CONFIG_DIR/config.json")"
 
 write_client() {
   local platform="$1" stack="$2" interface="$3"
   local platform_name="${platform^}"
-  local tcp_file="$CLIENT_DIR/${platform_name}-Singbox-TCP.json"
-  local udp_file="$CLIENT_DIR/${platform_name}-Singbox-UDP.json"
-  local auto_file="$CLIENT_DIR/${platform_name}-Singbox-Auto.json"
+  local tcp_file="$CLIENT_DIR/${platform_name}-TCP.json"
+  local udp_file="$CLIENT_DIR/${platform_name}-UDP.json"
+  local auto_file="$CLIENT_DIR/${platform_name}-Auto.json"
   local tun_interface=""
   [ -n "$interface" ] && tun_interface="\"interface_name\": \"$interface\"," 
 
@@ -227,13 +236,13 @@ EOF
   cat > "$udp_file" <<EOF
 {
   "log": {"level": "warn"},
-  "dns": {"servers": [{"type": "udp", "tag": "dns", "server": "1.1.1.1", "detour": "hy2-out"}], "final": "dns", "strategy": "ipv4_only"},
+  "dns": {"servers": [{"type": "udp", "tag": "dns", "server": "1.1.1.1", "detour": "hysteria2-out"}], "final": "dns", "strategy": "ipv4_only"},
   "inbounds": [{"type": "tun", "tag": "tun-in", $tun_interface "address": ["172.19.0.1/30"], "mtu": 1400, "auto_route": true, "strict_route": true, "stack": "$stack"}],
   "outbounds": [
-    {"type": "hysteria2", "tag": "hy2-out", "server": "$SERVER_IP", "server_port": 53, "password": "$HY2_PASSWORD", "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
+    {"type": "hysteria2", "tag": "hysteria2-out", "server": "$SERVER_IP", "server_port": 53, "password": "$HYSTERIA2_PASSWORD", "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
     {"type": "direct", "tag": "direct"}
   ],
-  "route": {"rules": [{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"}, {"ip_cidr": ["$SERVER_IP/32"], "outbound": "direct"}], "final": "hy2-out", "auto_detect_interface": true}
+  "route": {"rules": [{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"}, {"ip_cidr": ["$SERVER_IP/32"], "outbound": "direct"}], "final": "hysteria2-out", "auto_detect_interface": true}
 }
 EOF
 
@@ -243,8 +252,8 @@ EOF
   "dns": {"servers": [{"type": "udp", "tag": "dns", "server": "1.1.1.1", "detour": "vless-out"}], "final": "dns", "strategy": "ipv4_only"},
   "inbounds": [{"type": "tun", "tag": "tun-in", $tun_interface "address": ["172.19.0.1/30"], "mtu": 1400, "auto_route": true, "strict_route": true, "stack": "$stack"}],
   "outbounds": [
-    {"type": "urltest", "tag": "auto", "outbounds": ["hy2-out", "vless-out"], "url": "https://www.gstatic.com/generate_204", "interval": "876000h", "tolerance": 100, "interrupt_exist_connections": false},
-    {"type": "hysteria2", "tag": "hy2-out", "server": "$SERVER_IP", "server_port": 53, "password": "$HY2_PASSWORD", "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
+    {"type": "urltest", "tag": "auto", "outbounds": ["hysteria2-out", "vless-out"], "url": "https://www.gstatic.com/generate_204", "interval": "$AUTO_TEST_INTERVAL", "tolerance": 100, "interrupt_exist_connections": false},
+    {"type": "hysteria2", "tag": "hysteria2-out", "server": "$SERVER_IP", "server_port": 53, "password": "$HYSTERIA2_PASSWORD", "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
     {"type": "vless", "tag": "vless-out", "server": "$SERVER_IP", "server_port": 443, "uuid": "$UUID", "flow": "xtls-rprx-vision", "tcp_fast_open": true, "tcp_keep_alive": "30s", "tcp_keep_alive_interval": "15s", "tls": {"enabled": true, "server_name": "www.cloudflare.com", "utls": {"enabled": true, "fingerprint": "chrome"}, "reality": {"enabled": true, "public_key": "$REALITY_PUBLIC_KEY", "short_id": "$SHORT_ID"}}},
     {"type": "direct", "tag": "direct"}
   ],
