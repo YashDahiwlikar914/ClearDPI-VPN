@@ -1,95 +1,174 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-if [ "${1:-}" = "--check" ]; then
-  ARCH="$(uname -m)"
-  case "$ARCH" in
+readonly INSTALL_DIR="/usr/local/bin"
+readonly CONFIG_DIR="/etc/sing-box"
+readonly CLIENT_DIR="/root/ClearDPI-VPN/Clients"
+readonly AUTO_TEST_INTERVAL="876000h"
+
+valid_ipv4() {
+  local address="$1"
+  local octet
+  local octets
+
+  [[ "$address" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+  IFS=. read -r -a octets <<< "$address"
+
+  for octet in "${octets[@]}"; do
+    ((10#$octet <= 255)) || return 1
+  done
+}
+
+require_commands() {
+  local command_name
+
+  for command_name in "$@"; do
+    command -v "$command_name" >/dev/null || {
+      echo "${command_name^} is missing."
+      return 1
+    }
+  done
+}
+
+check_vps() {
+  local architecture
+  local server_ip
+
+  architecture="$(uname -m)"
+  case "$architecture" in
     x86_64|aarch64) ;;
-    *) echo "This VPS uses an unsupported architecture. It reported $ARCH."; exit 1 ;;
+    *)
+      echo "This VPS uses an unsupported architecture. It reported $architecture."
+      return 1
+      ;;
   esac
 
-  for CMD in curl openssl tar iptables systemctl; do
-    command -v "$CMD" >/dev/null || { echo "$CMD is missing."; exit 1; }
-  done
+  require_commands curl openssl tar iptables systemctl
+  server_ip="${SERVER_IP:-$(curl -4fsS --max-time 5 https://api.ipify.org)}"
+  valid_ipv4 "$server_ip" || {
+    echo "Server IP is not a valid IPv4 address."
+    return 1
+  }
 
-  SERVER_IP="${SERVER_IP:-$(curl -4fsS --max-time 5 https://api.ipify.org)}"
   curl -fsSL --max-time 10 https://api.github.com/repos/SagerNet/sing-box/releases/latest >/dev/null
   echo "ClearDPI checks passed."
-  echo "VPS architecture is $ARCH."
-  echo "Server IP is $SERVER_IP."
-  exit 0
-fi
+  echo "VPS architecture is $architecture."
+  echo "Server IP is $server_ip."
+}
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "Run this as root."
-  exit 1
-fi
+install_dependencies() {
+  local missing_packages=()
+  local package_name
 
-INSTALL_DIR="/usr/local/bin"
-CONFIG_DIR="/etc/sing-box"
-CLIENT_DIR="/root/ClearDPI-VPN/Clients"
-AUTO_TEST_INTERVAL="876000h"
-ARCH="$(uname -m)"
+  for package_name in curl openssl tar iptables; do
+    command -v "$package_name" >/dev/null || missing_packages+=("$package_name")
+  done
 
-MISSING_PACKAGES=()
-for PACKAGE in curl openssl tar iptables; do
-  command -v "$PACKAGE" >/dev/null || MISSING_PACKAGES+=("$PACKAGE")
-done
+  if [ "${#missing_packages[@]}" -eq 0 ]; then
+    return
+  fi
 
-if [ "${#MISSING_PACKAGES[@]}" -gt 0 ]; then
-  echo "Installing missing packages ${MISSING_PACKAGES[*]}."
+  echo "Installing missing packages ${missing_packages[*]}."
+  command -v apt-get >/dev/null || {
+    echo "Apt is missing. Install the required packages manually."
+    return 1
+  }
   apt-get update
-  DEBIAN_FRONTEND=noninteractive apt-get install -y "${MISSING_PACKAGES[@]}"
-fi
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+}
 
-SERVER_IP="${SERVER_IP:-$(curl -4fsS --max-time 5 https://api.ipify.org)}"
-SING_BOX_VERSION="${SING_BOX_VERSION:-}"
+detect_server_ip() {
+  SERVER_IP="${SERVER_IP:-$(curl -4fsS --max-time 5 https://api.ipify.org)}"
+  valid_ipv4 "$SERVER_IP" || {
+    echo "Server IP is not a valid IPv4 address."
+    return 1
+  }
+  export SERVER_IP
+}
 
-case "$ARCH" in
-  x86_64) SING_BOX_ARCH="amd64" ;;
-  aarch64) SING_BOX_ARCH="arm64" ;;
-  *) echo "This VPS uses an unsupported architecture. It reported $ARCH."; exit 1 ;;
-esac
+detect_architecture() {
+  case "$(uname -m)" in
+    x86_64) SING_BOX_ARCH="amd64" ;;
+    aarch64) SING_BOX_ARCH="arm64" ;;
+    *)
+      echo "This VPS uses an unsupported architecture. It reported $(uname -m)."
+      return 1
+      ;;
+  esac
+  export SING_BOX_ARCH
+}
 
-if [ -z "$SING_BOX_VERSION" ]; then
-  SING_BOX_VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | awk -F'"' '/"tag_name"/ {print $4; exit}')"
-fi
+find_release() {
+  SING_BOX_VERSION="${SING_BOX_VERSION:-}"
+  if [ -z "$SING_BOX_VERSION" ]; then
+    SING_BOX_VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | awk -F'"' '/"tag_name"/ {print $4; exit}')"
+  fi
 
-if [ -z "$SING_BOX_VERSION" ]; then
-  echo "Could not find the latest sing-box release. Set SING_BOX_VERSION and try again."
-  exit 1
-fi
+  if [ -z "$SING_BOX_VERSION" ]; then
+    echo "Could not find the latest sing-box release. Set SING_BOX_VERSION and try again."
+    return 1
+  fi
 
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+  if [[ ! "$SING_BOX_VERSION" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "SING_BOX_VERSION contains invalid characters."
+    return 1
+  fi
+  export SING_BOX_VERSION
+}
 
-ARCHIVE="sing-box-${SING_BOX_VERSION}-linux-${SING_BOX_ARCH}.tar.gz"
-URL="https://github.com/SagerNet/sing-box/releases/download/${SING_BOX_VERSION}/${ARCHIVE}"
-curl -fL "$URL" -o "$TMP_DIR/$ARCHIVE"
-tar -xzf "$TMP_DIR/$ARCHIVE" -C "$TMP_DIR"
-install -m 0755 "$(find "$TMP_DIR" -type f -name sing-box -print -quit)" "$INSTALL_DIR/sing-box"
+install_sing_box() {
+  local archive
+  local archive_path
+  local binary_path
+  local download_url
 
-install -d -m 0700 "$CONFIG_DIR" "$CLIENT_DIR"
+  TMP_DIR="$(mktemp -d)"
+  trap 'rm -rf -- "$TMP_DIR"' EXIT INT TERM
 
-UUID="$(cat /proc/sys/kernel/random/uuid)"
-HYSTERIA2_PASSWORD="$(openssl rand -hex 24)"
-OBFS_PASSWORD="$(openssl rand -hex 24)"
-REALITY_KEYS="$($INSTALL_DIR/sing-box generate reality-keypair)"
-REALITY_PRIVATE_KEY="$(printf '%s\n' "$REALITY_KEYS" | awk '/PrivateKey:/ {print $2}')"
-REALITY_PUBLIC_KEY="$(printf '%s\n' "$REALITY_KEYS" | awk '/PublicKey:/ {print $2}')"
+  archive="sing-box-${SING_BOX_VERSION}-linux-${SING_BOX_ARCH}.tar.gz"
+  archive_path="$TMP_DIR/$archive"
+  download_url="https://github.com/SagerNet/sing-box/releases/download/${SING_BOX_VERSION}/${archive}"
 
-if [ -z "$REALITY_PRIVATE_KEY" ] || [ -z "$REALITY_PUBLIC_KEY" ]; then
-  echo "Could not generate the Reality keys."
-  exit 1
-fi
+  curl -fL "$download_url" -o "$archive_path"
+  tar -xzf "$archive_path" -C "$TMP_DIR"
+  binary_path="$(find "$TMP_DIR" -type f -name sing-box -print -quit)"
 
-openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-  -subj "/CN=www.cloudflare.com" \
-  -keyout "$CONFIG_DIR/server.key" \
-  -out "$CONFIG_DIR/server.crt" >/dev/null 2>&1
-chmod 0600 "$CONFIG_DIR/server.key"
+  if [ -z "$binary_path" ]; then
+    echo "The sing-box archive did not contain a binary."
+    return 1
+  fi
 
-cat > "$CONFIG_DIR/config.json" <<EOF
+  install -m 0755 "$binary_path" "$INSTALL_DIR/sing-box"
+}
+
+generate_credentials() {
+  local reality_keys
+
+  UUID="$(cat /proc/sys/kernel/random/uuid)"
+  HYSTERIA2_PASSWORD="$(openssl rand -hex 24)"
+  OBFS_PASSWORD="$(openssl rand -hex 24)"
+  reality_keys="$($INSTALL_DIR/sing-box generate reality-keypair)"
+  REALITY_PRIVATE_KEY="$(printf '%s\n' "$reality_keys" | awk '/PrivateKey:/ {print $2}')"
+  REALITY_PUBLIC_KEY="$(printf '%s\n' "$reality_keys" | awk '/PublicKey:/ {print $2}')"
+
+  if [ -z "$REALITY_PRIVATE_KEY" ] || [ -z "$REALITY_PUBLIC_KEY" ]; then
+    echo "Could not generate the Reality keys."
+    return 1
+  fi
+}
+
+write_server_config() {
+  install -d -m 0700 "$CONFIG_DIR" "$CLIENT_DIR"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+    -subj "/CN=www.cloudflare.com" \
+    -keyout "$CONFIG_DIR/server.key" \
+    -out "$CONFIG_DIR/server.crt" >/dev/null 2>&1 || {
+    echo "Could not generate the TLS certificate."
+    return 1
+  }
+  chmod 0600 "$CONFIG_DIR/server.key"
+
+  cat > "$CONFIG_DIR/config.json" <<EOF
 {
   "log": {"level": "warn", "timestamp": true},
   "inbounds": [
@@ -132,8 +211,10 @@ cat > "$CONFIG_DIR/config.json" <<EOF
   "outbounds": [{"type": "direct", "tag": "direct"}]
 }
 EOF
+}
 
-cat > /etc/sysctl.d/99-cleardpi-vpn.conf <<'EOF'
+write_sysctl_config() {
+  cat > /etc/sysctl.d/99-cleardpi-vpn.conf <<'EOF'
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 net.core.rmem_max = 16777216
@@ -152,9 +233,11 @@ net.ipv4.tcp_max_syn_backlog = 8192
 net.ipv4.ip_local_port_range = 1024 65535
 net.ipv4.tcp_notsent_lowat = 16384
 EOF
-sysctl --system >/dev/null
+  sysctl --system >/dev/null
+}
 
-cat > /etc/systemd/system/sing-box.service <<'EOF'
+write_services() {
+  cat > /etc/systemd/system/sing-box.service <<'EOF'
 [Unit]
 Description=ClearDPI VPN Server
 After=network-online.target
@@ -171,7 +254,7 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 EOF
 
-cat > /usr/local/sbin/cleardpi-udp-redirect <<'EOF'
+  cat > /usr/local/sbin/cleardpi-udp-redirect <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -180,15 +263,14 @@ for PORT in 53 123 443 3074 3478 19302; do
   if [ "$ACTION" = "start" ]; then
     iptables -t nat -C PREROUTING -p udp --dport "$PORT" -j REDIRECT --to-port 8443 2>/dev/null || \
       iptables -t nat -A PREROUTING -p udp --dport "$PORT" -j REDIRECT --to-port 8443
-  else
-    iptables -t nat -C PREROUTING -p udp --dport "$PORT" -j REDIRECT --to-port 8443 2>/dev/null && \
-      iptables -t nat -D PREROUTING -p udp --dport "$PORT" -j REDIRECT --to-port 8443 || true
+  elif iptables -t nat -C PREROUTING -p udp --dport "$PORT" -j REDIRECT --to-port 8443 2>/dev/null; then
+    iptables -t nat -D PREROUTING -p udp --dport "$PORT" -j REDIRECT --to-port 8443
   fi
 done
 EOF
-chmod 0755 /usr/local/sbin/cleardpi-udp-redirect
+  chmod 0755 /usr/local/sbin/cleardpi-udp-redirect
 
-cat > /etc/systemd/system/cleardpi-udp-redirect.service <<'EOF'
+  cat > /etc/systemd/system/cleardpi-udp-redirect.service <<'EOF'
 [Unit]
 Description=ClearDPI VPN UDP Port Disguises
 After=network-online.target
@@ -203,22 +285,21 @@ ExecStop=/usr/local/sbin/cleardpi-udp-redirect stop
 [Install]
 WantedBy=multi-user.target
 EOF
+}
 
-"$INSTALL_DIR/sing-box" check -c "$CONFIG_DIR/config.json"
-systemctl daemon-reload
-systemctl enable --now sing-box
-systemctl enable --now cleardpi-udp-redirect
-
-SHORT_ID="$(awk -F'"' '/"short_id"/ {print $4; exit}' "$CONFIG_DIR/config.json")"
-
-write_client() {
-  local platform="$1" stack="$2" interface="$3"
+write_client_profile() {
+  local platform="$1"
+  local stack="$2"
+  local interface_name="$3"
   local platform_name="${platform^}"
+  local tun_interface=""
   local tcp_file="$CLIENT_DIR/${platform_name}-TCP.json"
   local udp_file="$CLIENT_DIR/${platform_name}-UDP.json"
   local auto_file="$CLIENT_DIR/${platform_name}-Auto.json"
-  local tun_interface=""
-  [ -n "$interface" ] && tun_interface="\"interface_name\": \"$interface\"," 
+
+  if [ -n "$interface_name" ]; then
+    printf -v tun_interface '"interface_name": "%s",' "$interface_name"
+  fi
 
   cat > "$tcp_file" <<EOF
 {
@@ -263,17 +344,50 @@ EOF
   chmod 0600 "$tcp_file" "$udp_file" "$auto_file"
 }
 
-write_client windows gvisor sing-box
-write_client android system ""
-cat > "$CLIENT_DIR/README.txt" <<EOF
+write_client_profiles() {
+  SHORT_ID="$(awk -F'"' '/"short_id"/ {print $4; exit}' "$CONFIG_DIR/config.json")"
+  write_client_profile windows gvisor sing-box
+  write_client_profile android system ""
+
+  cat > "$CLIENT_DIR/README.txt" <<EOF
 Server IP is $SERVER_IP
 Reality public key is $REALITY_PUBLIC_KEY
 Reality short ID is $SHORT_ID
 
 Import the profile for your device. Keep this directory private.
 EOF
-chmod 0600 "$CLIENT_DIR/README.txt"
+  chmod 0600 "$CLIENT_DIR/README.txt"
+}
 
-echo "The setup is complete."
-echo "Check the server with systemctl status sing-box."
-echo "Your client profiles are in $CLIENT_DIR."
+install_server() {
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "Run this as root."
+    return 1
+  fi
+
+  install_dependencies
+  detect_server_ip
+  detect_architecture
+  find_release
+  install_sing_box
+  generate_credentials
+  write_server_config
+  write_sysctl_config
+  write_services
+
+  "$INSTALL_DIR/sing-box" check -c "$CONFIG_DIR/config.json"
+  systemctl daemon-reload
+  systemctl enable --now sing-box
+  systemctl enable --now cleardpi-udp-redirect
+  write_client_profiles
+
+  echo "The setup is complete."
+  echo "Check the server with systemctl status sing-box."
+  echo "Your client profiles are in $CLIENT_DIR."
+}
+
+case "${1:-}" in
+  "") install_server ;;
+  --check) check_vps ;;
+  *) echo "Usage is ClearDPI.sh or ClearDPI.sh --check."; exit 1 ;;
+esac
