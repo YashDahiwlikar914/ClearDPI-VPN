@@ -87,11 +87,11 @@ The `generated` directory is ignored by Git. Do not commit it. The files contain
 
 Download the Windows x64 sing-box release. Extract `sing-box.exe` and `wintun.dll` into the same directory.
 
-Copy `generated/windows-tcp.json` into that directory as `config.json`. Open PowerShell as Administrator and start sing-box.
+Copy `generated/windows-tcp.json` into that directory. The filename is not required to be `config.json`.
 
 ```powershell
 cd C:\sing-box
-.\sing-box.exe run -c config.json
+.\sing-box.exe run -c windows-tcp.json
 ```
 
 Use `windows-udp.json` when UDP is allowed. Use `windows-auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
