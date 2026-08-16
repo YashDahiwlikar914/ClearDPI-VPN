@@ -37,10 +37,10 @@ scp ClearDPI.sh ubuntu@SERVER_IP:/tmp/ClearDPI.sh
 ssh ubuntu@SERVER_IP 'sudo bash /tmp/ClearDPI.sh'
 ```
 
-After the repository is public, the script can run directly from GitHub. Replace `GITHUB_USER` with the GitHub account that owns the repository.
+The script can also run directly from GitHub.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GITHUB_USER/ClearDPI-VPN/main/ClearDPI.sh | ssh ubuntu@SERVER_IP 'sudo bash -s'
+curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | ssh ubuntu@SERVER_IP 'sudo bash -s'
 ```
 
 This downloads the script on the local machine and sends it to the VPS over SSH. The script still runs as root on the VPS.
@@ -48,7 +48,7 @@ This downloads the script on the local machine and sends it to the VPS over SSH.
 When already connected to the VPS, use the shorter command.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GITHUB_USER/ClearDPI-VPN/main/ClearDPI.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | sudo bash
 ```
 
 Pin the command to a release tag or commit when using it on a real server. A branch such as `main` can change later.
@@ -58,7 +58,7 @@ The script downloads the latest sing-box release for the VPS architecture. It th
 Run the safe preflight check before installation.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GITHUB_USER/ClearDPI-VPN/main/ClearDPI.sh | sudo bash -s -- --check
+curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | sudo bash -s -- --check
 ```
 
 The check does not install anything or change the server.
