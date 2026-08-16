@@ -37,15 +37,15 @@ scp ClearDPI.sh ubuntu@SERVER_IP:/tmp/ClearDPI.sh
 ssh ubuntu@SERVER_IP 'sudo bash /tmp/ClearDPI.sh'
 ```
 
-The script can also run directly from GitHub.
+Run the installer remotely from your laptop with SSH.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | ssh ubuntu@SERVER_IP 'sudo bash -s'
 ```
 
-This downloads the script on the local machine and sends it to the VPS over SSH. The script still runs as root on the VPS.
+Replace `SERVER_IP` with the public IPv4 address of the Ubuntu VPS. The script runs on the VPS, not on the laptop.
 
-When already connected to the VPS, use the shorter command.
+When already connected to the VPS through SSH, use the shorter command.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | sudo bash
