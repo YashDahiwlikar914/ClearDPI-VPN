@@ -87,7 +87,7 @@ The `generated` directory is ignored by Git. Do not commit it. The files contain
 
 Download the Windows x64 sing-box release. Extract `sing-box.exe` and `wintun.dll` into the same directory.
 
-Copy `generated/windows-tcp.json` into that directory. The filename is not required to be `config.json`.
+Copy `generated/windows-tcp.json` into that directory.
 
 ```powershell
 cd C:\sing-box
