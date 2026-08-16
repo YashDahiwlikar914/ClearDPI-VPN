@@ -204,9 +204,10 @@ SHORT_ID="$(awk -F'"' '/"short_id"/ {print $4; exit}' "$CONFIG_DIR/config.json")
 
 write_client() {
   local platform="$1" stack="$2" interface="$3"
-  local tcp_file="$CLIENT_DIR/${platform}-tcp.json"
-  local udp_file="$CLIENT_DIR/${platform}-udp.json"
-  local auto_file="$CLIENT_DIR/${platform}-auto.json"
+  local platform_name="${platform^}"
+  local tcp_file="$CLIENT_DIR/${platform_name}-Singbox-TCP.json"
+  local udp_file="$CLIENT_DIR/${platform_name}-Singbox-UDP.json"
+  local auto_file="$CLIENT_DIR/${platform_name}-Singbox-Auto.json"
   local tun_interface=""
   [ -n "$interface" ] && tun_interface="\"interface_name\": \"$interface\"," 
 

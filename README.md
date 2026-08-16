@@ -87,14 +87,14 @@ The `generated` directory is ignored by Git. Do not commit it. The files contain
 
 Download the Windows x64 sing-box release. Extract `sing-box.exe` and `wintun.dll` into the same directory.
 
-Copy `generated/windows-tcp.json` into that directory.
+Copy `generated/Windows-Singbox-TCP.json` into that directory.
 
 ```powershell
 cd C:\sing-box
-.\sing-box.exe run -c windows-tcp.json
+.\sing-box.exe run -c Windows-Singbox-TCP.json
 ```
 
-Use `windows-udp.json` when UDP is allowed. Use `windows-auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
+Use `Windows-Singbox-UDP.json` when UDP is allowed. Use `Windows-Singbox-Auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
 
 The sing-box log shows the selected transport as UDP or TCP.
 
@@ -109,11 +109,11 @@ Receive window autotuning should show `normal`.
 
 ## Android
 
-Install sing-box for Android. Import `generated/android-tcp.json`, grant VPN permission, and start the profile.
+Install sing-box for Android. Import `generated/Android-Singbox-TCP.json`, grant VPN permission, and start the profile.
 
 Exclude sing-box from battery optimization. Android can stop VPN services that run in the background.
 
-Use `android-udp.json` when UDP is allowed. Use `android-auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
+Use `Android-Singbox-UDP.json` when UDP is allowed. Use `Android-Singbox-Auto.json` when you want sing-box to test both paths during startup. The selected path stays active until the VPN stops.
 
 Open the sing-box log view to see the selected transport as UDP or TCP.
 
