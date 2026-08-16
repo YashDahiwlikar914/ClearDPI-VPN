@@ -30,38 +30,40 @@ Keep SSH limited to your own IP when possible.
 
 ## Install The Server
 
-Run these commands from this repository. Replace `SERVER_IP` with the public IPv4 address of your VPS.
-
-```bash
-scp ClearDPI.sh ubuntu@SERVER_IP:/tmp/ClearDPI.sh
-ssh ubuntu@SERVER_IP 'sudo bash /tmp/ClearDPI.sh'
-```
-
-Run the installer remotely from your laptop with SSH.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | ssh ubuntu@SERVER_IP 'sudo bash -s'
-```
-
-Replace `SERVER_IP` with the public IPv4 address of the Ubuntu VPS. The script runs on the VPS, not on the laptop.
-
-When already connected to the VPS through SSH, use the shorter command.
+Use the first command when you are already logged into the Ubuntu VPS through SSH. Run it in the VPS terminal.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | sudo bash
 ```
 
-Pin the command to a release tag or commit when using it on a real server. A branch such as `main` can change later.
+This command downloads `ClearDPI.sh` from GitHub and runs it on the VPS. Do not run this command in the laptop terminal.
 
-The script downloads the latest sing-box release for the VPS architecture. It then creates the server configuration, enables BBR, applies the TCP and UDP settings, and starts two systemd services.
-
-Run the safe preflight check before installation.
+Run the safe preflight check before installation if you want to verify the VPS first.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | sudo bash -s -- --check
 ```
 
 The check does not install anything or change the server.
+
+Run the next command from your laptop when you want to start the installer without opening an SSH session first. Replace `SERVER_IP` with the public IPv4 address of the VPS.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/YashDahiwlikar914/ClearDPI-VPN/master/ClearDPI.sh | ssh ubuntu@SERVER_IP 'sudo bash -s'
+```
+
+The pipe sends the downloaded script through SSH. The installer still runs on the VPS.
+
+You can also copy the script to the VPS and run it in two steps.
+
+```bash
+scp ClearDPI.sh ubuntu@SERVER_IP:/tmp/ClearDPI.sh
+ssh ubuntu@SERVER_IP 'sudo bash /tmp/ClearDPI.sh'
+```
+
+The script downloads the latest sing-box release for the VPS architecture. It then creates the server configuration, enables BBR, applies the TCP and UDP settings, and starts two systemd services.
+
+Pin the command to a release tag or commit when using it on a real server. A branch can change later.
 
 The client files are written to `/root/ClearDPI-VPN/Clients`.
 
