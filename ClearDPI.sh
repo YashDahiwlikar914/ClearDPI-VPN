@@ -327,7 +327,7 @@ EOF
   "dns": {"servers": [{"type": "udp", "tag": "dns", "server": "1.1.1.1", "detour": "hysteria2-out"}], "final": "dns", "strategy": "ipv4_only"},
   "inbounds": [{"type": "tun", "tag": "tun-in", $tun_interface "address": ["172.19.0.1/30"], "mtu": 1400, "auto_route": true, "strict_route": true, "stack": "$stack"}],
   "outbounds": [
-    {"type": "hysteria2", "tag": "hysteria2-out", "server": "$SERVER_IP", "server_port": 53, "password": "$HYSTERIA2_PASSWORD", "up_mbps": 50, "down_mbps": 100, "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
+    {"type": "hysteria2", "tag": "hysteria2-out", "server": "$SERVER_IP", "server_port": 443, "password": "$HYSTERIA2_PASSWORD", "up_mbps": 50, "down_mbps": 100, "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
     {"type": "direct", "tag": "direct"}
   ],
   "route": {"rules": [{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"}, {"ip_cidr": ["$SERVER_IP/32"], "outbound": "direct"}], "final": "hysteria2-out", "auto_detect_interface": true}
@@ -341,7 +341,7 @@ EOF
   "inbounds": [{"type": "tun", "tag": "tun-in", $tun_interface "address": ["172.19.0.1/30"], "mtu": 1400, "auto_route": true, "strict_route": true, "stack": "$stack"}],
   "outbounds": [
     {"type": "urltest", "tag": "auto", "outbounds": ["hysteria2-out", "vless-out"], "url": "https://www.gstatic.com/generate_204", "interval": "$AUTO_TEST_INTERVAL", "tolerance": 100, "idle_timeout": "$AUTO_TEST_INTERVAL", "interrupt_exist_connections": false},
-    {"type": "hysteria2", "tag": "hysteria2-out", "server": "$SERVER_IP", "server_port": 53, "password": "$HYSTERIA2_PASSWORD", "up_mbps": 50, "down_mbps": 100, "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
+    {"type": "hysteria2", "tag": "hysteria2-out", "server": "$SERVER_IP", "server_port": 443, "password": "$HYSTERIA2_PASSWORD", "up_mbps": 50, "down_mbps": 100, "obfs": {"type": "salamander", "password": "$OBFS_PASSWORD"}, "tls": {"enabled": true, "insecure": true, "server_name": "www.cloudflare.com"}},
     {"type": "vless", "tag": "vless-out", "server": "$SERVER_IP", "server_port": 443, "uuid": "$UUID", "flow": "xtls-rprx-vision", "tcp_fast_open": true, "tcp_keep_alive": "30s", "tcp_keep_alive_interval": "15s", "tls": {"enabled": true, "server_name": "www.cloudflare.com", "utls": {"enabled": true, "fingerprint": "chrome"}, "reality": {"enabled": true, "public_key": "$REALITY_PUBLIC_KEY", "short_id": "$SHORT_ID"}}},
     {"type": "direct", "tag": "direct"}
   ],
