@@ -101,7 +101,9 @@ detect_architecture() {
 find_release() {
   SING_BOX_VERSION="${SING_BOX_VERSION:-}"
   if [ -z "$SING_BOX_VERSION" ]; then
-    SING_BOX_VERSION="$(curl -fsSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | awk -F'"' '/"tag_name"/ {print $4; exit}')"
+    local release_json
+    release_json="$(curl -fsSL --max-time 15 https://api.github.com/repos/SagerNet/sing-box/releases/latest)"
+    SING_BOX_VERSION="$(printf '%s\n' "$release_json" | awk -F'"' '/"tag_name"/ {print $4; exit}')"
   fi
 
   if [ -z "$SING_BOX_VERSION" ]; then
@@ -125,7 +127,7 @@ install_sing_box() {
   TMP_DIR="$(mktemp -d)"
   trap 'rm -rf -- "$TMP_DIR"' EXIT INT TERM
 
-  archive="sing-box-${SING_BOX_VERSION}-linux-${SING_BOX_ARCH}.tar.gz"
+  archive="sing-box-${SING_BOX_VERSION#v}-linux-${SING_BOX_ARCH}.tar.gz"
   archive_path="$TMP_DIR/$archive"
   download_url="https://github.com/SagerNet/sing-box/releases/download/${SING_BOX_VERSION}/${archive}"
 
